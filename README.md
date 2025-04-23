@@ -13,24 +13,31 @@ A simple Python application that interacts with the Ollama API to generate recip
 ## Requirements
 
 - Python 3.8+
-- `ollama` library (`pip install ollama`)
-- `pydantic` library (`pip install pydantic`)
+- `uv` package manager (`pip install uv`)
+- `ollama` library
+- `pydantic` library
 - Running Ollama server with the `deepseek-r1:1.5b` model
 
 ## Usage
 
 1. Clone the repository or save the `cooking_assistant.py` file.
 
-2. Install dependencies:
+2. Install dependencies using `uv`:
 
    ```bash
-   pip install ollama pydantic
+   uv sync
+   ```
+
+   Or, if you have a `requirements.txt`, install specific dependencies:
+
+   ```bash
+   uv pip install ollama pydantic
    ```
 
 3. Run the script:
 
    ```bash
-   python cooking_assistant.py
+   uv run python cooking_assistant.py
    ```
 
 4. Follow the prompts to enter ingredients and select a dish.
@@ -44,7 +51,7 @@ A simple Python application that interacts with the Ollama API to generate recip
 ## Example
 
 ```bash
-$ python cooking_assistant.py
+$ uv run python cooking_assistant.py
 What ingredients do you have?
 Enter a ingredient: Potato
 You have other ingredients? Y/N: Y
