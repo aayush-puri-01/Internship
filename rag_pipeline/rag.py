@@ -6,16 +6,25 @@ from langchain.prompts import PromptTemplate
 from langchain.chains import create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_community.document_loaders import PyPDFLoader
+from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
+from langchain.callbacks.manager import CallbackManager
 import os
 from reranker import QueryBasedReranker
 
 class RAGPipeline():
-    def __init__(self, llm_model:str = "deepseek-r1:1.5b", persist_dir = "rag_chroma_db", use_reranker: bool = True):
+    def __init__(self, llm_model:str = "deepseek-r1:1.5b", persist_dir = "rag_chroma_db", use_reranker: bool = True, one_liner: bool = True):
         self.llm_model = llm_model
-        self.llm = OllamaLLM(model=self.llm_model)
+
+        callback_manager = CallbackManager([StreamingStdOutCallbackHandler()])
+
+        self.llm = OllamaLLM(model=self.llm_model, callbacks=callback_manager)
+
         self.vectorstore = None
         self.persist_directory = persist_dir
+
         self.use_reranker = use_reranker
+
+        self.one_liner = one_liner
 
     def load_pdf_doc(self, pdf_path):
         loader = PyPDFLoader(pdf_path)
@@ -91,15 +100,43 @@ class RAGPipeline():
                 "input" : user_question
             }
         )
-        print(type(response))
         print(response)
 
     
     def run_query(self, user_query:str, retrieval_chain):
         response = retrieval_chain.invoke({
             "input": user_query
-        })
+        },
+        stream = True)
         return response["answer"]
+    
+
+    
+    def respond_one_liner(self, one_liner_prompt_template):
+            prompt_template = self.load_prompt_template(
+                one_liner_prompt_template,
+            )
+
+            retrieval_chain = pipeline.build_chain(prompt_template)
+            
+            answer = pipeline.run_query(
+                user_query=user_question,
+                retrieval_chain=retrieval_chain)
+            
+            print(answer) 
+    
+    def respond_paragraph(self, paragraph_prompt_template):
+            prompt_template = self.load_prompt_template(
+                paragraph_prompt_template,
+            )
+
+            retrieval_chain = pipeline.build_chain(prompt_template)
+            
+            answer = pipeline.run_query(
+                user_query=user_question,
+                retrieval_chain=retrieval_chain)
+            
+            print(answer)       
     
 if __name__ == "__main__":
     pipeline = RAGPipeline()
@@ -107,29 +144,26 @@ if __name__ == "__main__":
     chunks = pipeline.split_document(pdf_text)
     pipeline.get_chunk_embeddings(chunks) # create the vector database
 
-    prompt_template = pipeline.load_prompt_template(
-        "prompt_templates.txt",
-    )
+    # prompt_template = pipeline.load_prompt_template(
+    #     "prompt_templates.txt",
+    # )
 
-    user_question = "why does a simple mechanism like self-attention work so well?"
+    user_question = "How does positional embedding work?"
 
     if pipeline.use_reranker == False:
 
-        retrieval_chain = pipeline.build_chain(prompt_template)
-        
-        answer = pipeline.run_query(
-            user_query=user_question,
-            retrieval_chain=retrieval_chain)
-        
-        print(answer)
+        if pipeline.one_liner == True:
+            pipeline.respond_one_liner("prompt_templates_oneline.txt")
+
+        else:
+            pipeline.respond_paragraph("prompt_templates.txt")
+           
 
     else: 
 
         reranker = QueryBasedReranker()
 
         retriever = pipeline.initialize_retriever(k=5)
-
-        # chunks = retriever.get_relevant_documents(user_question)
 
         chunks = retriever.invoke(user_question)
 
@@ -141,4 +175,12 @@ if __name__ == "__main__":
 
         reranked_chunks = reranker.rerank_chunks(scores, chunks, top_k = 3)
 
+        if pipeline.one_liner == True:
+            prompt_template = pipeline.load_prompt_template(
+                "prompt_templates_oneline.txt",
+            )
+        else:
+            prompt_template = pipeline.load_prompt_template(
+                "prompt_templates.txt",
+            )           
         pipeline.reranker_build_and_respond(reranked_chunks, prompt_template, user_question=user_question)
