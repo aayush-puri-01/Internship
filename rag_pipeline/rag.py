@@ -7,13 +7,15 @@ from langchain.chains import create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_community.document_loaders import PyPDFLoader
 import os
+from reranker import QueryBasedReranker
 
 class RAGPipeline():
-    def __init__(self, llm_model:str = "deepseek-r1:1.5b", persist_dir = "rag_chroma_db"):
+    def __init__(self, llm_model:str = "deepseek-r1:1.5b", persist_dir = "rag_chroma_db", use_reranker: bool = True):
         self.llm_model = llm_model
         self.llm = OllamaLLM(model=self.llm_model)
         self.vectorstore = None
         self.persist_directory = persist_dir
+        self.use_reranker = use_reranker
 
     def load_pdf_doc(self, pdf_path):
         loader = PyPDFLoader(pdf_path)
@@ -60,29 +62,6 @@ class RAGPipeline():
         with open(prompt_file, 'r') as f:
             entire_text = f.read()
             template_str = entire_text.strip()
-
-        # prompts = entire_text.split('---')
-
-        # prompt_dict = {}
-        # current_key = None
-        # current_text = []
-
-        # for line in prompts: 
-        #     stripped_line = line.strip()
-        #     if stripped_line.startswith("# Prompt"):
-        #         if current_key and current_text:
-        #             prompt_dict[current_key] = "\n".join(current_text).strip() 
-        #             #save the earlier key and text to the dictionary, new # Prompt encountered, so, set new prompt key and current_text
-        #         current_key = stripped_line.split(':')[1].strip()
-        #         current_text = []
-        #     elif current_key:
-        #         current_text.append(stripped_line)
-
-        # if current_key and current_text:
-        #     prompt_dict[current_key] = "\n".join(current_text).strip()
-
-        # if prompt_key not in prompt_dict:
-        #     raise ValueError(f"The provided prompt key {prompt_key} not found in {prompt_file}")
         
         single_prompt_template = PromptTemplate(
             input_variables=["context", "question"],
@@ -101,6 +80,21 @@ class RAGPipeline():
         retrieval_chain = create_retrieval_chain(retriever, combine_docs_chain)
         return retrieval_chain
     
+    def reranker_build_and_respond(self, reranked_chunks, prompt_w_context, user_question):
+        combine_docs_chain = create_stuff_documents_chain(
+            llm = self.llm,
+            prompt = prompt_w_context
+        )
+        response = combine_docs_chain.invoke(
+            {
+                "context" : reranked_chunks,
+                "input" : user_question
+            }
+        )
+        print(type(response))
+        print(response)
+
+    
     def run_query(self, user_query:str, retrieval_chain):
         response = retrieval_chain.invoke({
             "input": user_query
@@ -117,12 +111,34 @@ if __name__ == "__main__":
         "prompt_templates.txt",
     )
 
-    retrieval_chain = pipeline.build_chain(prompt_template)
-
     user_question = "why does a simple mechanism like self-attention work so well?"
-    
-    answer = pipeline.run_query(
-        user_query=user_question,
-        retrieval_chain=retrieval_chain)
-    
-    print(answer)
+
+    if pipeline.use_reranker == False:
+
+        retrieval_chain = pipeline.build_chain(prompt_template)
+        
+        answer = pipeline.run_query(
+            user_query=user_question,
+            retrieval_chain=retrieval_chain)
+        
+        print(answer)
+
+    else: 
+
+        reranker = QueryBasedReranker()
+
+        retriever = pipeline.initialize_retriever(k=5)
+
+        # chunks = retriever.get_relevant_documents(user_question)
+
+        chunks = retriever.invoke(user_question)
+
+        queries_for_chunks, chunks = reranker.generate_chunk_based_queries(chunks)
+
+        question_embedding, chunk_queries_embeddings = reranker.generate_embeddings(user_question, queries_for_chunks)
+
+        scores = reranker.calculate_similarity_scores(question_embedding, chunk_queries_embeddings)
+
+        reranked_chunks = reranker.rerank_chunks(scores, chunks, top_k = 3)
+
+        pipeline.reranker_build_and_respond(reranked_chunks, prompt_template, user_question=user_question)
