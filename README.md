@@ -40,6 +40,38 @@ This project implements a simple Retrieval-Augmented Generation (RAG) pipeline e
 
 ---
 
+# RAG Pipeline API (Streaming + Reranker Support)
+
+This API allows querying a Retrieval-Augmented Generation (RAG) pipeline backed by LLMs with optional reranking and streaming support.
+
+---
+
+## Endpoint
+
+### `POST /rag/query`
+
+Sends a user query to the RAG pipeline and receives a streamed response.
+
+#### Request Body (JSON)
+
+```json
+{
+  "user_query": "What is attention in transformers?"
+}
+```
+
+## cURL request
+
+curl -X POST http://localhost:8000/rag/query \
+ -H "Content-Type: application/json" \
+ -d '{"user_query": "What is attention in transformers?"}'
+
+---
+
+## Use docs
+
+http://localhost:8000/docs
+
 # Cooking Assistant
 
 A simple Python application that interacts with the Ollama API to generate recipes based on user-provided ingredients and prompts. Supports both synchronous and streaming modes for recipe generation.
@@ -70,11 +102,13 @@ A simple Python application that interacts with the Ollama API to generate recip
    uv sync
    ```
 
-   Or, if you have a `requirements.txt`, install specific dependencies:
+````
 
-   ```bash
-   uv pip install ollama pydantic
-   ```
+Or, if you have a `requirements.txt`, install specific dependencies:
+
+```bash
+uv pip install ollama pydantic
+```
 
 3. Run the script:
 
@@ -110,3 +144,4 @@ Your Prompt: What dish do you wish to make: Vegetable stir-fry
 - Ensure the Ollama server is running with the correct model.
 - Streaming mode displays recipe JSON chunks as they arrive.
 - Invalid inputs or API errors are handled with clear error messages.
+````
