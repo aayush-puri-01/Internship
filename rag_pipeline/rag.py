@@ -9,10 +9,10 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 from langchain.callbacks.manager import CallbackManager
 import os
-from reranker import QueryBasedReranker
+from rag_pipeline.reranker import QueryBasedReranker
 
 class RAGPipeline():
-    def __init__(self, llm_model:str = "deepseek-r1:1.5b", persist_dir = "rag_chroma_db", use_reranker: bool = True, one_liner: bool = True):
+    def __init__(self, llm_model:str = "deepseek-r1:1.5b", persist_dir = "rag_pipeline/rag_chroma_db", use_reranker: bool = True, one_liner: bool = True):
         self.llm_model = llm_model
 
         callback_manager = CallbackManager([StreamingStdOutCallbackHandler()])
@@ -100,7 +100,7 @@ class RAGPipeline():
                 "input" : user_question
             }
         )
-        print(response)
+
 
     
     def run_query(self, user_query:str, retrieval_chain):
@@ -113,40 +113,38 @@ class RAGPipeline():
 
     
     def respond_one_liner(self, one_liner_prompt_template):
-            prompt_template = self.load_prompt_template(
-                one_liner_prompt_template,
-            )
+        prompt_template = self.load_prompt_template(
+            one_liner_prompt_template,
+        )
 
-            retrieval_chain = pipeline.build_chain(prompt_template)
+        retrieval_chain = pipeline.build_chain(prompt_template)
+        
+        answer = pipeline.run_query(
+            user_query=user_question,
+            retrieval_chain=retrieval_chain)
+        
+        return answer
             
-            answer = pipeline.run_query(
-                user_query=user_question,
-                retrieval_chain=retrieval_chain)
-            
-            print(answer) 
+
     
     def respond_paragraph(self, paragraph_prompt_template):
-            prompt_template = self.load_prompt_template(
-                paragraph_prompt_template,
-            )
+        prompt_template = self.load_prompt_template(
+            paragraph_prompt_template,
+        )
 
-            retrieval_chain = pipeline.build_chain(prompt_template)
+        retrieval_chain = pipeline.build_chain(prompt_template)
+        
+        answer = pipeline.run_query(
+            user_query=user_question,
+            retrieval_chain=retrieval_chain)
             
-            answer = pipeline.run_query(
-                user_query=user_question,
-                retrieval_chain=retrieval_chain)
-            
-            print(answer)       
+        return answer
     
 if __name__ == "__main__":
     pipeline = RAGPipeline()
     pdf_text = pipeline.load_pdf_doc("Attention.pdf")
     chunks = pipeline.split_document(pdf_text)
     pipeline.get_chunk_embeddings(chunks) # create the vector database
-
-    # prompt_template = pipeline.load_prompt_template(
-    #     "prompt_templates.txt",
-    # )
 
     user_question = "How does positional embedding work?"
 
@@ -183,4 +181,5 @@ if __name__ == "__main__":
             prompt_template = pipeline.load_prompt_template(
                 "prompt_templates.txt",
             )           
-        pipeline.reranker_build_and_respond(reranked_chunks, prompt_template, user_question=user_question)
+        final_answer = pipeline.reranker_build_and_respond(reranked_chunks, prompt_template, user_question=user_question)
+        print(final_answer)
