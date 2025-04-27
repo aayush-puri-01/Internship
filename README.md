@@ -102,8 +102,6 @@ A simple Python application that interacts with the Ollama API to generate recip
    uv sync
    ```
 
-````
-
 Or, if you have a `requirements.txt`, install specific dependencies:
 
 ```bash
@@ -144,4 +142,7 @@ Your Prompt: What dish do you wish to make: Vegetable stir-fry
 - Ensure the Ollama server is running with the correct model.
 - Streaming mode displays recipe JSON chunks as they arrive.
 - Invalid inputs or API errors are handled with clear error messages.
-````
+
+```
+
+```

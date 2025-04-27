@@ -52,16 +52,18 @@ async def query_rag(request: QueryRequest):
         if not request:
             return JSONResponse(content={"error":"Query is required"}, status_code=400)
 
-        def rag_stream():
-            output = None
+        async def rag_stream():
+
             try:
                 if pipeline.use_reranker == False:
 
                     if pipeline.one_liner == True:
-                        output = pipeline.respond_one_liner("rag_pipeline/prompt_templates_oneline.txt")
+                        async for partial in pipeline.respond_one_liner("rag_pipeline/prompt_templates_oneline.txt"):
+                            yield json.dumps({"answer": partial}) + "\n"
 
                     else:
-                        output = pipeline.respond_paragraph("rag_pipeline/prompt_templates.txt")  
+                        async for partial in pipeline.respond_paragraph("rag_pipeline/prompt_templates.txt"):
+                            yield json.dumps({"answer": partial}) + "\n"
 
                 else: 
 
@@ -85,14 +87,26 @@ async def query_rag(request: QueryRequest):
                         prompt_template = pipeline.load_prompt_template(
                             "rag_pipeline/prompt_templates.txt",
                         )           
-                    output = pipeline.reranker_build_and_respond(reranked_chunks, prompt_template, user_question=request.user_query)
+                    # output = pipeline.reranker_build_and_respond(reranked_chunks, prompt_template, user_question=request.user_query)
 
-                yield json.dumps({"answer":output})
+                    async for partial in pipeline.reranker_build_and_respond(reranked_chunks, prompt_template, user_question=request.user_query):
+                        yield json.dumps({"answer" : partial}) + "\n"
+
+                # yield json.dumps({"answer":output})
 
             except Exception as e:
-                yield json.dumps({"error": "RAG Processing failed"})
+                print("Exception in rag_stream:", e)
+                traceback.print_exc()
+                yield json.dumps({"error": str(e)}) + "\n"
             
-        return StreamingResponse(rag_stream(), media_type="application/json")
+        return StreamingResponse(
+            rag_stream(), 
+            media_type="application/x-ndjson",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no"
+            }
+            )
 
     except Exception as e:
         traceback.print_exc()

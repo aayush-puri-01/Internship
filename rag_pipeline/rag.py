@@ -89,7 +89,7 @@ class RAGPipeline():
         retrieval_chain = create_retrieval_chain(retriever, combine_docs_chain)
         return retrieval_chain
     
-    def reranker_build_and_respond(self, reranked_chunks, prompt_w_context, user_question):
+    async def reranker_build_and_respond(self, reranked_chunks, prompt_w_context, user_question):
         combine_docs_chain = create_stuff_documents_chain(
             llm = self.llm,
             prompt = prompt_w_context
@@ -100,6 +100,8 @@ class RAGPipeline():
                 "input" : user_question
             }
         )
+        for word in response.split():
+            yield word + " "
 
 
     

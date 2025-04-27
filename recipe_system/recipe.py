@@ -81,38 +81,53 @@ class CookingAssistant:
         return self._generate_recipe_nonstream(user_input)
     
     def _generate_recipe_nonstream(self, user_input: RequestSchema) -> Any:
+
+        ing_str = ""
+        for ing in user_input.ingredients:
+            ing_str = ing_str + ", " + ing
+        # Convert the list of strings to a string to pass as a prompt to the llm model
+
         response = ollama.chat(
-        model = self.model,
-        messages = [
-            {
-                "role": "user",
-                "content": f"I have these ingredients: {user_input.ingredients}. {user_input.prompt}"
-            }
-        ],
-        format = ResponseSchema.model_json_schema(),
-        stream = False
+            model = self.model,
+            messages = [
+                {
+                    "role": "system",
+                    "content": "You are a helpful Cooking Assistant that needs to suggest recipes based on provided ingredients. Recommend ingredients if the ones provided are not enough for the recipe."
+                },
+                {
+                    "role": "user",
+                    "content": f"I have these ingredients: {ing_str}. {user_input.prompt}"
+                    #the ingredients were initially simply passed as user_input.ingredients, is this plausible? 
+                }
+            ],
+            format = ResponseSchema.model_json_schema(),
+            stream = False
         )
         
-        print("--------Recipe--------\n")
+        # print("--------Recipe--------\n")
 
         try:
             recipe = ResponseSchema.model_validate_json(response.message.content)
-            print(recipe.model_dump_json())
+            # print(recipe.model_dump_json())
             return recipe.model_dump_json()
         except ValueError:
             return {"Error": "Failed to validate response"}
         
     def _generate_recipe_stream(self, user_input: RequestSchema) -> Any:
         stream = ollama.chat(
-        model = self.model,
-        messages = [
-            {
-                "role": "user",
-                "content": f"I have these ingredients: {user_input.ingredients}. {user_input.prompt}"
-            }
-        ],
-        format = ResponseSchema.model_json_schema(),
-        stream = True
+            model = self.model,
+            messages = [
+                {
+                    "role": "system",
+                    "content": "You are a helpful Cooking Assistant that needs to suggest recipes based on provided ingredients. Recommend ingredients if the ones provided are not enough for the recipe."
+                },
+                {
+                    "role": "user",
+                    "content": f"I have these ingredients: {user_input.ingredients}. {user_input.prompt}"
+                }
+            ],
+            format = ResponseSchema.model_json_schema(),
+            stream = True
         )
         
         print("--------Recipe--------\n")
@@ -120,17 +135,25 @@ class CookingAssistant:
         collected_chunks = ""
 
         for chunk in stream:
+            # collected_chunks += chunk
             content = chunk.get("message", {}).get("content", "")
-            collected_chunks += content
-            print(content, end="", flush=True)
+            if content:
+                print(content, end="", flush=True)
+                print(type(content))
+                yield content
 
-        try:
-            recipe = ResponseSchema.model_validate_json(collected_chunks)
-            print("\n")
-            print(recipe.model_dump_json())
-            return recipe.model_dump_json()
-        except ValueError:
-            return {"Error": "Failed to validate response"}
+
+        # try:
+        #     recipe = ResponseSchema.model_validate_json(collected_chunks)
+
+        #     # print("\n")
+        #     # print(recipe.model_dump_json())
+        #     # return recipe.model_dump_json()
+
+        #     return recipe.model_dump() #this returns as a dictionary exactly what fastapi expects
+        
+        # except ValueError:
+        #     return {"Error": "Failed to validate response"}
         
     def run(self, stream: bool = False) -> Any:
         ingredients = self.get_ingredients()
