@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse, JSONResponse
 import json
 from pydantic import BaseModel
@@ -20,11 +20,14 @@ The input must be structured as a json
 class QueryResponse(BaseModel):
     answer: str
 
+async def stream_response(generator):
+    async for chunk in generator:
+        yield f"data: {json.dumps({'chunk': chunk})}\n\n"
 
 pipeline = RAGPipeline(
     llm_model="deepseek-r1:1.5b",
-    use_reranker=False,
-    one_liner=False
+    use_reranker=True,
+    one_liner=True
 )
 
 reranker = QueryBasedReranker(
@@ -46,7 +49,7 @@ pipeline.get_chunk_embeddings(chunks)
 router = APIRouter()
 
 @router.post("/query", response_model=QueryResponse)
-async def query_rag(request: QueryRequest):
+async def query_rag(request: QueryRequest, stream:bool = Query(False)):
 
     try:
         if not request:
@@ -54,11 +57,33 @@ async def query_rag(request: QueryRequest):
 
         if pipeline.use_reranker == False:
 
-            if pipeline.one_liner == True:
-                answer = await pipeline.respond_one_liner("rag_pipeline/prompt_templates_oneline.txt", request.user_query)
+                if pipeline.one_liner == True:
+                    if stream:
+                        generator = pipeline.respond_one_liner_stream("rag_pipeline/prompt_templates_oneline.txt", request.user_query)
+                        return StreamingResponse(
+                            stream_response(generator),
+                            media_type="text/event-stream",
+                            headers = {
+                                "Cache-Control" : "no-cache",
+                                "Connection" : "keep-alive"
+                            }
+                        )
+                    else:
+                        answer = await pipeline.respond_one_liner("rag_pipeline/prompt_templates_oneline.txt", request.user_query)                       
 
-            else:
-                answer = await pipeline.respond_paragraph("rag_pipeline/prompt_templates.txt", request.user_query)
+                else:
+                    if stream:
+                        generator = pipeline.respond_paragraph_stream("rag_pipeline/prompt_templates.txt", request.user_query)
+                        return StreamingResponse(
+                            stream_response(generator),
+                            media_type="text/event-stream",
+                            headers = {
+                                "Cache-Control" : "no-cache",
+                                "Connection" : "keep-alive"
+                            }
+                        )
+                    else:
+                        answer = await pipeline.respond_paragraph("rag_pipeline/prompt_templates.txt", request.user_query)
 
         else: 
 
@@ -83,7 +108,19 @@ async def query_rag(request: QueryRequest):
                     "rag_pipeline/prompt_templates.txt",
                 )           
 
-            answer = await pipeline.reranker_build_and_respond(reranked_chunks, prompt_template, user_question=request.user_query)
+            if stream:
+                generator = pipeline.reranker_build_and_respond_stream(reranked_chunks, prompt_template, user_question=request.user_query)
+                return StreamingResponse(
+                    stream_response(generator),
+                    media_type="text/event-stream",
+                    headers = {
+                        "Cache-Control" : "no-cache",
+                        "Connection" : "keep-alive"
+                    }
+                )
+            else:
+                answer = await pipeline.reranker_build_and_respond(reranked_chunks, prompt_template, user_question=request.user_query)
+
 
         return QueryResponse(answer=answer)
 

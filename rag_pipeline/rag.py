@@ -20,7 +20,7 @@ class RAGPipeline():
 
         callback_manager = CallbackManager([StreamingStdOutCallbackHandler()])
 
-        self.llm = OllamaLLM(model=self.llm_model, callbacks=callback_manager, num_predict=20)
+        self.llm = OllamaLLM(model=self.llm_model, callbacks=callback_manager)
 
         self.vectorstore = None
         self.persist_directory = persist_dir
@@ -92,6 +92,8 @@ class RAGPipeline():
         retrieval_chain = create_retrieval_chain(retriever, combine_docs_chain)
         return retrieval_chain
     
+    ###         STREAMING / NON-STREAMING FUNCTIONS     ###
+    
     async def reranker_build_and_respond(self, reranked_chunks, prompt_w_context, user_question):
         combine_docs_chain = create_stuff_documents_chain(
             llm = self.llm,
@@ -103,10 +105,20 @@ class RAGPipeline():
                 "input" : user_question
             }
         )
-        print(f"reranker_build_and_respond response type: {type(response)}, content: {response}")
-
-        print(response)
         return str(response)
+    
+    async def reranker_build_and_respond_stream(self, reranked_chunks, prompt_w_context, user_question):
+        combine_docs_chain = create_stuff_documents_chain(
+            llm = self.llm,
+            prompt = prompt_w_context
+        )
+        async for chunk in combine_docs_chain.astream(
+            {
+                "context" : reranked_chunks,
+                "input" : user_question
+            }
+        ):
+            yield chunk
 
 
     
@@ -115,6 +127,13 @@ class RAGPipeline():
             "input": user_query
         })
         return str(response["answer"])
+
+    async def run_query_stream(self, user_query:str, retrieval_chain):
+        async for chunk in  retrieval_chain.astream({
+            "input": user_query
+        }):
+            answer = chunk.get("answer", str(chunk)) if  isinstance(chunk, dict) else str(chunk)
+            yield answer
 
     
     async def respond_one_liner(self, one_liner_prompt_template, user_question:str):
@@ -130,6 +149,17 @@ class RAGPipeline():
 
         return str(answer)
             
+    async def respond_one_liner_stream(self, one_liner_prompt_template, user_question:str):
+        prompt_template = self.load_prompt_template(
+            one_liner_prompt_template,
+        )
+
+        retrieval_chain = self.build_chain(prompt_template)
+        
+        async for chunk in self.run_query_stream(
+            user_query=user_question,
+            retrieval_chain=retrieval_chain):
+            yield chunk
 
     
     async def respond_paragraph(self, paragraph_prompt_template, user_question:str):
@@ -144,6 +174,18 @@ class RAGPipeline():
             retrieval_chain=retrieval_chain)
 
         return str(answer)
+    
+    async def respond_paragraph_stream(self, paragraph_prompt_template, user_question:str):
+        prompt_template = self.load_prompt_template(
+            paragraph_prompt_template,
+        )
+
+        retrieval_chain = self.build_chain(prompt_template)
+        
+        async for chunk in self.run_query_stream(
+            user_query=user_question,
+            retrieval_chain=retrieval_chain):
+            yield chunk
     
 if __name__ == "__main__":
     pipeline = RAGPipeline()
