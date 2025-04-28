@@ -1,6 +1,11 @@
 import ollama
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from typing import List, Dict, Any
+import logging
+from fastapi import HTTPException
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class RequestSchema(BaseModel):
     ingredients: List[str]
@@ -82,36 +87,59 @@ class CookingAssistant:
     
     def _generate_recipe_nonstream(self, user_input: RequestSchema) -> Any:
 
-        ing_str = ""
-        for ing in user_input.ingredients:
-            ing_str = ing_str + ", " + ing
+        ing_str = ", ".join(user_input.ingredients)
         # Convert the list of strings to a string to pass as a prompt to the llm model
-
-        response = ollama.chat(
-            model = self.model,
-            messages = [
-                {
-                    "role": "system",
-                    "content": "You are a helpful Cooking Assistant that needs to suggest recipes based on provided ingredients. Recommend ingredients if the ones provided are not enough for the recipe."
-                },
-                {
-                    "role": "user",
-                    "content": f"I have these ingredients: {ing_str}. {user_input.prompt}"
-                    #the ingredients were initially simply passed as user_input.ingredients, is this plausible? 
-                }
-            ],
-            format = ResponseSchema.model_json_schema(),
-            stream = False
-        )
-        
-        # print("--------Recipe--------\n")
+        print(ing_str)
 
         try:
-            recipe = ResponseSchema.model_validate_json(response.message.content)
-            # print(recipe.model_dump_json())
-            return recipe.model_dump_json()
-        except ValueError:
-            return {"Error": "Failed to validate response"}
+            response = ollama.chat(
+                model = self.model,
+                messages = [
+                    {
+                        "role": "system",
+                        "content": """You are a helpful Cooking Assistant that needs to suggest recipes based on provided ingredients. Recommend ingredients if the ones provided are not enough for the recipe.
+
+                        The recipe must be returned strictly in the following JSON format:
+                        {
+                        "title": "Recipe Title",
+                        "steps": [
+                            "First step",
+                            "Second step",
+                            "Third step"
+                        ]
+                        }
+
+                        Do not add anything else. Do not include explanations or apologies.
+                        Only return valid JSON matching exactly this schema.
+                        """
+                    },
+                    {
+                        "role": "user",
+                        "content": f"I have these ingredients: {ing_str}. {user_input.prompt}"
+                        #the ingredients were initially simply passed as user_input.ingredients, is this plausible? 
+                    }
+                ],
+                format = "json",
+                stream = False
+            )
+
+            print("\n-----Response generated----\n")
+            
+            content = response.get("message", {}).get("content", "")
+            if not content:
+                raise ValueError("Missing content in LLM Response")
+            logger.info(f"RAW LLM Response: {content}")
+            recipe = ResponseSchema.model_validate_json(content)
+            return recipe
+    
+        except ValidationError as e: 
+            logger.error(f"Validation error: {str(e)}")
+            raise HTTPException(status_code=500, detail = f"validation error : {str(e)}")
+        
+        except Exception as e:
+            logger.error(f"Error generating the recipe: {str(e)}")
+            raise HTTPException(status_code=500, detail = f"Error generating the recipe : {str(e)}")
+
         
     def _generate_recipe_stream(self, user_input: RequestSchema) -> Any:
         stream = ollama.chat(

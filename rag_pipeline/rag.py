@@ -7,9 +7,12 @@ from langchain.chains import create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
+from langchain.callbacks.base import BaseCallbackHandler
 from langchain.callbacks.manager import CallbackManager
 import os
 from rag_pipeline.reranker import QueryBasedReranker
+
+
 
 class RAGPipeline():
     def __init__(self, llm_model:str = "deepseek-r1:1.5b", persist_dir = "rag_pipeline/rag_chroma_db", use_reranker: bool = True, one_liner: bool = True):
@@ -17,7 +20,7 @@ class RAGPipeline():
 
         callback_manager = CallbackManager([StreamingStdOutCallbackHandler()])
 
-        self.llm = OllamaLLM(model=self.llm_model, callbacks=callback_manager)
+        self.llm = OllamaLLM(model=self.llm_model, callbacks=callback_manager, num_predict=20)
 
         self.vectorstore = None
         self.persist_directory = persist_dir
@@ -94,53 +97,53 @@ class RAGPipeline():
             llm = self.llm,
             prompt = prompt_w_context
         )
-        response = combine_docs_chain.invoke(
+        response = await combine_docs_chain.ainvoke(
             {
                 "context" : reranked_chunks,
                 "input" : user_question
             }
         )
-        for word in response.split():
-            yield word + " "
+        print(f"reranker_build_and_respond response type: {type(response)}, content: {response}")
+
+        print(response)
+        return str(response)
 
 
     
-    def run_query(self, user_query:str, retrieval_chain):
-        response = retrieval_chain.invoke({
+    async def run_query(self, user_query:str, retrieval_chain):
+        response = await retrieval_chain.ainvoke({
             "input": user_query
-        },
-        stream = True)
-        return response["answer"]
-    
+        })
+        return str(response["answer"])
 
     
-    def respond_one_liner(self, one_liner_prompt_template):
+    async def respond_one_liner(self, one_liner_prompt_template, user_question:str):
         prompt_template = self.load_prompt_template(
             one_liner_prompt_template,
         )
 
-        retrieval_chain = pipeline.build_chain(prompt_template)
+        retrieval_chain = self.build_chain(prompt_template)
         
-        answer = pipeline.run_query(
+        answer = await self.run_query(
             user_query=user_question,
             retrieval_chain=retrieval_chain)
-        
-        return answer
+
+        return str(answer)
             
 
     
-    def respond_paragraph(self, paragraph_prompt_template):
+    async def respond_paragraph(self, paragraph_prompt_template, user_question:str):
         prompt_template = self.load_prompt_template(
             paragraph_prompt_template,
         )
 
-        retrieval_chain = pipeline.build_chain(prompt_template)
+        retrieval_chain = self.build_chain(prompt_template)
         
-        answer = pipeline.run_query(
+        answer = await self.run_query(
             user_query=user_question,
             retrieval_chain=retrieval_chain)
-            
-        return answer
+
+        return str(answer)
     
 if __name__ == "__main__":
     pipeline = RAGPipeline()
@@ -153,10 +156,10 @@ if __name__ == "__main__":
     if pipeline.use_reranker == False:
 
         if pipeline.one_liner == True:
-            pipeline.respond_one_liner("prompt_templates_oneline.txt")
+            pipeline.respond_one_liner("prompt_templates_oneline.txt", user_question=user_question)
 
         else:
-            pipeline.respond_paragraph("prompt_templates.txt")
+            pipeline.respond_paragraph("prompt_templates.txt", user_question=user_question)
            
 
     else: 

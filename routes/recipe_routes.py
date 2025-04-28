@@ -24,23 +24,24 @@ Remember that the input query will always be in the form of json and it will be 
 
 """
 
-class Response(BaseModel):
-    answer : str
+class ResponseSchema(BaseModel):
+    title: str
+    steps: List[str]
 
 cook_help = CookingAssistant(model="deepseek-r1:1.5b")
 
-@router.post("/query", response_model=Response)
+@router.post("/query", response_model=ResponseSchema)
 async def query_recipe_generator(request: InputData):
     try:
         if not request:
             return JSONResponse(content={"error" : "Query is required"}, status_code=400)
         
         try:
-            output = cook_help._generate_recipe_stream(request)
-            return StreamingResponse(output, media_type="text/plain")
+            output = cook_help._generate_recipe_nonstream(request)
+            return output
 
         except Exception as e:
-            return json.dumps({"error": f"Internal Processing error, {str(e)}"})
+            return JSONResponse({"error": f"Internal Processing error, {str(e)}"})
     
     except Exception as e:
         return JSONResponse(content = {"error" : str(e)}, status_code=500)
