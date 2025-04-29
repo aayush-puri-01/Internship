@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Query, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
 import json
 from pydantic import BaseModel
@@ -28,20 +28,38 @@ class ResponseSchema(BaseModel):
     title: str
     steps: List[str]
 
+async def stream_response(generator):
+    async for recipe in generator:
+        yield f"data: {json.dumps({'chunk': recipe})}\n\n"
+
 cook_help = CookingAssistant(model="deepseek-r1:1.5b")
 
 @router.post("/query", response_model=ResponseSchema)
-async def query_recipe_generator(request: InputData):
+async def query_recipe_generator(request: InputData, stream:bool = Query(False)):
     try:
         if not request:
             return JSONResponse(content={"error" : "Query is required"}, status_code=400)
         
         try:
-            output = cook_help._generate_recipe_nonstream(request)
-            return output
+            if stream:
+                generator = cook_help._generate_recipe_stream(request)
+                return StreamingResponse(
+                    stream_response(generator),
+                    media_type="text/event-stream",
+                    headers={
+                        "Cache-Control": "no-cache",
+                        "Connection": "keep-alive"
+                    }
+                )
+            else:
+                output = cook_help._generate_recipe_nonstream(request)
+                print(output)
+                return output
+        except HTTPException as e:
+            raise e
 
         except Exception as e:
-            return JSONResponse({"error": f"Internal Processing error, {str(e)}"})
-    
+                return JSONResponse({"error": f"Internal Processing error, {str(e)}"})
+        
     except Exception as e:
         return JSONResponse(content = {"error" : str(e)}, status_code=500)
