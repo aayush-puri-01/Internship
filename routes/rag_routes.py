@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse, JSONResponse
 import json
 from pydantic import BaseModel
@@ -20,11 +20,14 @@ The input must be structured as a json
 class QueryResponse(BaseModel):
     answer: str
 
+async def stream_response(generator):
+    async for chunk in generator:
+        yield f"data: {json.dumps({'chunk': chunk})}\n\n"
 
 pipeline = RAGPipeline(
     llm_model="deepseek-r1:1.5b",
     use_reranker=True,
-    one_liner=False
+    one_liner=True
 )
 
 reranker = QueryBasedReranker(
@@ -46,53 +49,80 @@ pipeline.get_chunk_embeddings(chunks)
 router = APIRouter()
 
 @router.post("/query", response_model=QueryResponse)
-async def query_rag(request: QueryRequest):
+async def query_rag(request: QueryRequest, stream:bool = Query(False)):
 
     try:
         if not request:
             return JSONResponse(content={"error":"Query is required"}, status_code=400)
 
-        def rag_stream():
-            output = None
-            try:
-                if pipeline.use_reranker == False:
+        if pipeline.use_reranker == False:
 
-                    if pipeline.one_liner == True:
-                        output = pipeline.respond_one_liner("rag_pipeline/prompt_templates_oneline.txt")
-
-                    else:
-                        output = pipeline.respond_paragraph("rag_pipeline/prompt_templates.txt")  
-
-                else: 
-
-                    retriever = pipeline.initialize_retriever(k=5)
-
-                    chunks = retriever.invoke(request.user_query)
-
-                    queries_for_chunks, chunks = reranker.generate_chunk_based_queries(chunks)
-
-                    question_embedding, chunk_queries_embeddings = reranker.generate_embeddings(request.user_query, queries_for_chunks)
-
-                    scores = reranker.calculate_similarity_scores(question_embedding, chunk_queries_embeddings)
-
-                    reranked_chunks = reranker.rerank_chunks(scores, chunks, top_k = 3)
-
-                    if pipeline.one_liner == True:
-                        prompt_template = pipeline.load_prompt_template(
-                            "rag_pipeline/prompt_templates_oneline.txt",
+                if pipeline.one_liner == True:
+                    if stream:
+                        generator = pipeline.respond_one_liner_stream("rag_pipeline/prompt_templates_oneline.txt", request.user_query)
+                        return StreamingResponse(
+                            stream_response(generator),
+                            media_type="text/event-stream",
+                            headers = {
+                                "Cache-Control" : "no-cache",
+                                "Connection" : "keep-alive"
+                            }
                         )
                     else:
-                        prompt_template = pipeline.load_prompt_template(
-                            "rag_pipeline/prompt_templates.txt",
-                        )           
-                    output = pipeline.reranker_build_and_respond(reranked_chunks, prompt_template, user_question=request.user_query)
+                        answer = await pipeline.respond_one_liner("rag_pipeline/prompt_templates_oneline.txt", request.user_query)                       
 
-                yield json.dumps({"answer":output})
+                else:
+                    if stream:
+                        generator = pipeline.respond_paragraph_stream("rag_pipeline/prompt_templates.txt", request.user_query)
+                        return StreamingResponse(
+                            stream_response(generator),
+                            media_type="text/event-stream",
+                            headers = {
+                                "Cache-Control" : "no-cache",
+                                "Connection" : "keep-alive"
+                            }
+                        )
+                    else:
+                        answer = await pipeline.respond_paragraph("rag_pipeline/prompt_templates.txt", request.user_query)
 
-            except Exception as e:
-                yield json.dumps({"error": "RAG Processing failed"})
-            
-        return StreamingResponse(rag_stream(), media_type="application/json")
+        else: 
+
+            retriever = pipeline.initialize_retriever(k=5)
+
+            chunks = retriever.invoke(request.user_query)
+
+            queries_for_chunks, chunks = reranker.generate_chunk_based_queries(chunks)
+
+            question_embedding, chunk_queries_embeddings = reranker.generate_embeddings(request.user_query, queries_for_chunks)
+
+            scores = reranker.calculate_similarity_scores(question_embedding, chunk_queries_embeddings)
+
+            reranked_chunks = reranker.rerank_chunks(scores, chunks, top_k = 3)
+
+            if pipeline.one_liner == True:
+                prompt_template = pipeline.load_prompt_template(
+                    "rag_pipeline/prompt_templates_oneline.txt",
+                )
+            else:
+                prompt_template = pipeline.load_prompt_template(
+                    "rag_pipeline/prompt_templates.txt",
+                )           
+
+            if stream:
+                generator = pipeline.reranker_build_and_respond_stream(reranked_chunks, prompt_template, user_question=request.user_query)
+                return StreamingResponse(
+                    stream_response(generator),
+                    media_type="text/event-stream",
+                    headers = {
+                        "Cache-Control" : "no-cache",
+                        "Connection" : "keep-alive"
+                    }
+                )
+            else:
+                answer = await pipeline.reranker_build_and_respond(reranked_chunks, prompt_template, user_question=request.user_query)
+
+
+        return QueryResponse(answer=answer)
 
     except Exception as e:
         traceback.print_exc()

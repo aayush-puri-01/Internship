@@ -5,6 +5,7 @@ build/
 dist/
 wheels/
 *.egg-info
+rag_chroma_db/
 
 # Virtual environments
 .venv

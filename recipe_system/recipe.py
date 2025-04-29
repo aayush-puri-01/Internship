@@ -1,6 +1,12 @@
 import ollama
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from typing import List, Dict, Any
+import logging
+from fastapi import HTTPException
+import json
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class RequestSchema(BaseModel):
     ingredients: List[str]
@@ -81,56 +87,110 @@ class CookingAssistant:
         return self._generate_recipe_nonstream(user_input)
     
     def _generate_recipe_nonstream(self, user_input: RequestSchema) -> Any:
-        response = ollama.chat(
-        model = self.model,
-        messages = [
-            {
-                "role": "user",
-                "content": f"I have these ingredients: {user_input.ingredients}. {user_input.prompt}"
-            }
-        ],
-        format = ResponseSchema.model_json_schema(),
-        stream = False
-        )
-        
-        print("--------Recipe--------\n")
+
+        ing_str = ", ".join(user_input.ingredients)
+        # Convert the list of strings to a string to pass as a prompt to the llm model
+        print(ing_str)
 
         try:
-            recipe = ResponseSchema.model_validate_json(response.message.content)
-            print(recipe.model_dump_json())
-            return recipe.model_dump_json()
-        except ValueError:
-            return {"Error": "Failed to validate response"}
+            logger.info("---LLM model starting---")
+            response = ollama.chat(
+                model = self.model,
+                messages = [
+                    {
+                        "role": "system",
+                        "content": """You are a helpful Cooking Assistant that needs to suggest recipes based on provided ingredients. Recommend ingredients if the ones provided are not enough for the recipe.
+
+                        The recipe must be returned strictly in the following JSON format:
+                        {
+                        "title": "Recipe Title",
+                        "steps": [
+                            "First step",
+                            "Second step",
+                            "Third step"
+                        ]
+                        }
+
+                        Do not add anything else. Do not include explanations or apologies.
+                        Only return valid JSON matching exactly this schema.
+                        """
+                    },
+                    {
+                        "role": "user",
+                        "content": f"I have these ingredients: {ing_str}. {user_input.prompt}" 
+                    }
+                ],
+                format = "json",
+                stream = False
+            )
+            logger.info("---Finished Generating Response---")
+            content = response.get("message", {}).get("content", "")
+            logger.info(f"Raw Response: {content}")
+            if not content:
+                logger.error("No content in LLM response")
+                raise ValueError("Missing content in LLM Response")
+            recipe = ResponseSchema.model_validate_json(content)
+            logger.info(f"Validated Recipe: {recipe}")
+            return recipe   
+    
+        except ValidationError as e: 
+            logger.error(f"Validation error: {str(e)}")
+            raise HTTPException(status_code=500, detail = f"validation error : {str(e)}")
         
-    def _generate_recipe_stream(self, user_input: RequestSchema) -> Any:
-        stream = ollama.chat(
-        model = self.model,
-        messages = [
-            {
-                "role": "user",
-                "content": f"I have these ingredients: {user_input.ingredients}. {user_input.prompt}"
-            }
-        ],
-        format = ResponseSchema.model_json_schema(),
-        stream = True
-        )
+        except Exception as e:
+            logger.error(f"Error generating the recipe: {str(e)}")
+            raise HTTPException(status_code=500, detail = f"Error generating the recipe : {str(e)}")
+
         
-        print("--------Recipe--------\n")
+    async def _generate_recipe_stream(self, user_input: RequestSchema) -> Any:
+        ing_str = ", ".join(user_input.ingredients)
 
-        collected_chunks = ""
+        try: 
+            logger.info(f"---Ollama Model Starting----")
+            stream = ollama.chat(
+                model = self.model,
+                messages = [
+                    {
+                        "role": "system",
+                        "content": """You are a helpful Cooking Assistant that needs to suggest recipes based on provided ingredients. Recommend ingredients if the ones provided are not enough for the recipe.
 
-        for chunk in stream:
-            content = chunk.get("message", {}).get("content", "")
-            collected_chunks += content
-            print(content, end="", flush=True)
+                        Return the recipe in this format:
+                        Title: Recipe Title
+                        Steps: 
+                        -First step 
+                        -Second step
+                        -Third step
+                        """
+                    },
+                    {
+                        "role": "user",
+                        "content": f"I have these ingredients: {ing_str}. {user_input.prompt}"
+                    }
+                ],
+                format = ResponseSchema.model_json_schema(),
+                stream = True
+            )
 
-        try:
-            recipe = ResponseSchema.model_validate_json(collected_chunks)
-            print("\n")
-            print(recipe.model_dump_json())
-            return recipe.model_dump_json()
-        except ValueError:
-            return {"Error": "Failed to validate response"}
+            collected_chunks = ""
+
+            for chunk in stream:
+                content = chunk.get("message", {}).get("content", "")
+
+                if content:
+                    collected_chunks += content
+                    logger.info(f"Recipe Chunk: {collected_chunks}")
+                    yield collected_chunks
+                    collected_chunks = ""
+                if chunk.get("done", False):
+                    logger.info("---Streaming---completed---")
+                    if collected_chunks.strip():
+                        yield collected_chunks
+                    break
+
+
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error streaming recipe: {str(e)}")
+
         
     def run(self, stream: bool = False) -> Any:
         ingredients = self.get_ingredients()

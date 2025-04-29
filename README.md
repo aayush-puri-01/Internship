@@ -1,3 +1,58 @@
+# Recipe and RAG Pipeline API
+
+This FastAPI application provides two pipelines: `RecipeGenerator` for generating recipes based on ingredients and `RAGPipeline` for answering queries using a Retrieval-Augmented Generation (RAG) model. Both support streaming and non-streaming responses.
+
+## Prerequisites
+
+- Python 3.8+
+- Install dependencies: `pip install fastapi uvicorn pydantic ollama langchain langchain-community chromadb`
+- Run Ollama server with `deepseek-r1:1.5b` model.
+- Ensure `Attention.pdf` exists in `rag_pipeline/` for RAGPipeline.
+- Ensure prompt files (`rag_pipeline/prompt_templates.txt`, `rag_pipeline/prompt_templates_oneline.txt`) exist for RAGPipeline.
+- Start the server: `uvicorn main:app --host 0.0.0.0 --port 8000`
+
+## API Endpoints
+
+### 1. RecipeGenerator Pipeline
+
+Generates recipes based on ingredients and a prompt.
+
+#### Non-Streaming Request
+
+```bash
+curl -X POST "http://localhost:8000/generate-recipe" \
+-H "Content-Type: application/json" \
+-d '{"ingredients": ["chicken", "rice"], "prompt": "Suggest a quick dinner recipe"}'
+```
+
+#### Streaming Request
+
+```bash
+curl -X POST "http://localhost:8000/generate-recipe?stream=true" \
+-H "Content-Type: application/json" \
+-d '{"ingredients": ["chicken", "rice"], "prompt": "Suggest a quick dinner recipe"}'
+```
+
+### 2. RAG Pipeline
+
+Answers queries using a RAG model based on a PDF document (Attention.pdf).
+
+#### Non-Streaming Request
+
+```bash
+curl -X POST "http://localhost:8000/query" \
+-H "Content-Type: application/json" \
+-d '{"user_query": "What is attention in transformers?"}'
+```
+
+#### Streaming Request
+
+```bash
+curl -X POST "http://localhost:8000/query?stream=true" \
+-H "Content-Type: application/json" \
+-d '{"user_query": "What is attention in transformers?"}'
+```
+
 # RAG with LLM-based Reranker
 
 This project implements a simple Retrieval-Augmented Generation (RAG) pipeline enhanced with an LLM-based reranking strategy to improve the relevance of retrieved documents before generating a response.
@@ -40,38 +95,6 @@ This project implements a simple Retrieval-Augmented Generation (RAG) pipeline e
 
 ---
 
-# RAG Pipeline API (Streaming + Reranker Support)
-
-This API allows querying a Retrieval-Augmented Generation (RAG) pipeline backed by LLMs with optional reranking and streaming support.
-
----
-
-## Endpoint
-
-### `POST /rag/query`
-
-Sends a user query to the RAG pipeline and receives a streamed response.
-
-#### Request Body (JSON)
-
-```json
-{
-  "user_query": "What is attention in transformers?"
-}
-```
-
-## cURL request
-
-curl -X POST http://localhost:8000/rag/query \
- -H "Content-Type: application/json" \
- -d '{"user_query": "What is attention in transformers?"}'
-
----
-
-## Use docs
-
-http://localhost:8000/docs
-
 # Cooking Assistant
 
 A simple Python application that interacts with the Ollama API to generate recipes based on user-provided ingredients and prompts. Supports both synchronous and streaming modes for recipe generation.
@@ -84,7 +107,9 @@ A simple Python application that interacts with the Ollama API to generate recip
 - Supports streaming mode to display recipe output in real-time.
 - Uses Pydantic for structured input/output validation.
 
-## Requirements
+---
+
+# Requirements
 
 - Python 3.8+
 - `uv` package manager (`pip install uv`)
@@ -94,54 +119,18 @@ A simple Python application that interacts with the Ollama API to generate recip
 
 ## Usage
 
-1. Clone the repository or save the `cooking_assistant.py` file.
+1. Clone the respository
 
-2. Install dependencies using `uv`:
+2. Install dependencies using uv: `uv sync`
 
-   ```bash
-   uv sync
-   ```
-
-````
-
-Or, if you have a `requirements.txt`, install specific dependencies:
-
-```bash
-uv pip install ollama pydantic
-```
-
-3. Run the script:
-
-   ```bash
-   uv run python cooking_assistant.py
-   ```
-
-4. Follow the prompts to enter ingredients and select a dish.
-
-5. To enable streaming mode, modify the main execution:
-
-   ```python
-   final_response = assistant.run(stream=True)
-   ```
-
-## Example
-
-```bash
-$ uv run python cooking_assistant.py
-What ingredients do you have?
-Enter a ingredient: Potato
-You have other ingredients? Y/N: Y
-Enter a ingredient: Zucchini
-You have other ingredients? Y/N: N
-Possible dishes: Vegetable stir-fry, roasted vegetables
-Your Prompt: What dish do you wish to make: Vegetable stir-fry
---------Recipe--------
-{"title": "Vegetable Stir-Fry", "steps": ["Chop potatoes into cubes", "Slice zucchini", "Stir-fry with oil and spices"]}
-```
+3. Run uvicorn: `uvicorn main:app --reload`
 
 ## Notes
 
 - Ensure the Ollama server is running with the correct model.
 - Streaming mode displays recipe JSON chunks as they arrive.
 - Invalid inputs or API errors are handled with clear error messages.
-````
+
+```
+
+```
