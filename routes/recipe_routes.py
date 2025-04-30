@@ -31,6 +31,7 @@ class ResponseSchema(BaseModel):
 async def stream_response(generator):
     async for recipe in generator:
         yield f"data: {json.dumps({'chunk': recipe})}\n\n"
+        # yield recipe
 
 cook_help = CookingAssistant(model="deepseek-r1:1.5b")
 

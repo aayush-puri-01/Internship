@@ -3,7 +3,6 @@ from pydantic import BaseModel, ValidationError
 from typing import List, Dict, Any
 import logging
 from fastapi import HTTPException
-import json
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -89,8 +88,6 @@ class CookingAssistant:
     def _generate_recipe_nonstream(self, user_input: RequestSchema) -> Any:
 
         ing_str = ", ".join(user_input.ingredients)
-        # Convert the list of strings to a string to pass as a prompt to the llm model
-        print(ing_str)
 
         try:
             logger.info("---LLM model starting---")
@@ -152,7 +149,7 @@ class CookingAssistant:
                 messages = [
                     {
                         "role": "system",
-                        "content": """You are a helpful Cooking Assistant that needs to suggest recipes based on provided ingredients. Recommend ingredients if the ones provided are not enough for the recipe.
+                        "content": """You are a helpful Cooking Assistant that needs to suggest recipes based on provided ingredients. Recommend ingredients if the ones provided are not enough for the recipe. Do not provide explanations or apologies.
 
                         Return the recipe in this format:
                         Title: Recipe Title
@@ -167,7 +164,8 @@ class CookingAssistant:
                         "content": f"I have these ingredients: {ing_str}. {user_input.prompt}"
                     }
                 ],
-                format = ResponseSchema.model_json_schema(),
+                # format = ResponseSchema.model_json_schema(),
+                # since there is no point in validating a streaming response
                 stream = True
             )
 
@@ -181,6 +179,9 @@ class CookingAssistant:
                     logger.info(f"Recipe Chunk: {collected_chunks}")
                     yield collected_chunks
                     collected_chunks = ""
+
+                #this piece of code can indeed be improved, 
+                #error can be raised if no content exists
                 if chunk.get("done", False):
                     logger.info("---Streaming---completed---")
                     if collected_chunks.strip():
