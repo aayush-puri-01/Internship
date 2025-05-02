@@ -5,6 +5,8 @@ import re
 import json
 
 API_URL = "http://localhost:8000/recipe/query"
+# API_URL = "http://fastapi:8000/recipe/query"
+
 
 def generate_recipe(chatbot, ingredients, dish, stream=False):
 
@@ -22,8 +24,7 @@ def generate_recipe(chatbot, ingredients, dish, stream=False):
 
         if stream:
             assistant_reply = ""
-            buffer = ""
-            processed_lines = set()
+
 
             with requests.post(API_URL, json=payload, params={"stream":True}, stream=True) as r:
                 r.raise_for_status()
@@ -61,34 +62,39 @@ def user_input_processing(user_message, chat_history, ingredients, dish, stream_
     return generate_recipe(user_message, chat_history, ingredients, dish, stream_toggle)
 
 
-    
-with gr.Blocks() as demo:
-    gr.Markdown("# Cooking Assistant (streaming chatbot)")
+def get_interface():
+    with gr.Blocks() as demo:
+        gr.Markdown("# Cooking Assistant (streaming chatbot)")
 
-    chatbot = gr.Chatbot(
-        label = "Recipe Assistant",
-        height = 500,
-        render_markdown=True
-    )
+        chatbot = gr.Chatbot(
+            label = "Recipe Assistant",
+            height = 500,
+            type="tuples",
+            render_markdown=True
+        )
 
-    with gr.Row():
-            
-        ingredients_input = gr.Textbox(label="Ingredients (comma-separated)", placeholder="eg: tomato, basil, milk")
-        dish_input = gr.Textbox(label="Dish Prompt", placeholder="eg: I wish to make a pizza")
+        with gr.Row():
+                
+            ingredients_input = gr.Textbox(label="Ingredients (comma-separated)", placeholder="eg: tomato, basil, milk")
+            dish_input = gr.Textbox(label="Dish Prompt", placeholder="eg: I wish to make a pizza")
 
-    with gr.Row():
+        with gr.Row():
 
-        stream_toggle = gr.Checkbox(label="Streaming Output?")
-        generate_btn = gr.Button("Generate Recipe", variant = "primary")
+            stream_toggle = gr.Checkbox(label="Streaming Output?")
+            generate_btn = gr.Button("Generate Recipe", variant = "primary")
 
 
-    generate_btn.click(
-        generate_recipe,
-        inputs=[chatbot, ingredients_input, dish_input, stream_toggle],
-        outputs=chatbot,
-    )
+        generate_btn.click(
+            generate_recipe,
+            inputs=[chatbot, ingredients_input, dish_input, stream_toggle],
+            outputs=chatbot,
+        )
 
-    clear_btn = gr.Button("Clear Chat")
-    clear_btn.click(lambda: [], None, chatbot, queue = False)
+        clear_btn = gr.Button("Clear Chat")
+        clear_btn.click(lambda: [], None, chatbot, queue = False)
 
-demo.launch()
+        return demo
+
+final_interface = get_interface()
+final_interface.launch(server_name="0.0.0.0", server_port=7860)
+
