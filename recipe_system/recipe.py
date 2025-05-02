@@ -3,6 +3,17 @@ from pydantic import BaseModel, ValidationError
 from typing import List, Dict, Any
 import logging
 from fastapi import HTTPException
+import os
+
+# Set the base URL from the environment variable
+ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+ollama.base_url = ollama_host
+
+
+
+# ollama.base_url = "http://ollama:11434"
+#this is to ensure that the ollama client which uses host by default now refers to the container service named "ollama" which hosts the ollama model by itself
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -174,20 +185,20 @@ class CookingAssistant:
             for chunk in stream:
                 content = chunk.get("message", {}).get("content", "")
 
-                if content:
-                    collected_chunks += content
-                    logger.info(f"Recipe Chunk: {collected_chunks}")
-                    yield collected_chunks
-                    collected_chunks = ""
+                # if content:
+                #     collected_chunks += content
+                #     logger.info(f"Recipe Chunk: {collected_chunks}")
+                #     yield collected_chunks
+                #     collected_chunks = ""
 
-                #this piece of code can indeed be improved, 
-                #error can be raised if no content exists
-                if chunk.get("done", False):
-                    logger.info("---Streaming---completed---")
-                    if collected_chunks.strip():
-                        yield collected_chunks
-                    break
-
+                # #this piece of code can indeed be improved, 
+                # #error can be raised if no content exists
+                # if chunk.get("done", False):
+                #     logger.info("---Streaming---completed---")
+                #     if collected_chunks.strip():
+                #         yield collected_chunks
+                #     break
+                yield content
 
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error streaming recipe: {str(e)}")
