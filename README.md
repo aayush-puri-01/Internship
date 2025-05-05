@@ -131,6 +131,32 @@ A simple Python application that interacts with the Ollama API to generate recip
 - Streaming mode displays recipe JSON chunks as they arrive.
 - Invalid inputs or API errors are handled with clear error messages.
 
+## Docker Setup
+
+This project uses Docker Compose to containerize and orchestrate a multi-component AI application consisting of:
+
+- **FastAPI** backend (`fastapi_service`) for handling recipe generation requests.
+- **Gradio** frontend (`gradio_service`) providing a chatbot interface for user interaction.
+- **Ollama** LLM runtime (`ollama`) used to serve and run the `deepseek-r1:1.5b` model.
+
+### Services Overview
+
+- **FastAPI Service**  
+  Exposes an API at `localhost:8000`. It uses environment variables to communicate with the Ollama model.
+
+- **Gradio Service**  
+  Exposes a web interface at `localhost:7860`, where users can input ingredients and prompts to interact with the recipe assistant.
+
+- **Ollama Model Server**  
+  Automatically pulls the `deepseek-r1:1.5b` model and keeps the service running in the background.
+
+### Running the App
+
+1. Build and start all services:
+   ```bash
+   docker-compose up --build
+   ```
+
 ```
 
 ```
