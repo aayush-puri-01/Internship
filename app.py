@@ -4,9 +4,9 @@ import time
 import re
 import json
 
-API_URL = "http://localhost:8000/recipe/query"
-# API_URL = "http://fastapi:8000/recipe/query"
-
+# API_URL = "http://localhost:8000/recipe/query"
+API_URL = "http://fastapi:8000/recipe/query"
+#this api url can be made dynamic, ==> if environment variable exists, then place "fastapi" in the hostname part of the url and if env variable doesnt exist, simply put "localhost" in the hostname part
 
 def generate_recipe(chatbot, ingredients, dish, stream=False):
 

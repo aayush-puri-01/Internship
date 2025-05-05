@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+
+  fastapi:
+    build: 
+      context: .
+      dockerfile: Dockerfile.api
+    ports:
+      - "8000:8000"
+    container_name: fastapi_service
+    depends_on:
+      - ollama
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    restart: always
+
+  gradio:
+    build:
+      context: .
+      dockerfile: Dockerfile.gradio
+    ports:
+      - "7860:7860"
+    depends_on:
+      - fastapi
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - API_URL=http://fastapi:8000/recipe/query
+    restart: always
+    container_name: gradio_service
+
+
+  ollama:
+    image: ollama/ollama
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    restart: always
+    entrypoint: sh -c "ollama serve & sleep 5 && ollama pull deepseek-r1:1.5b && tail -f /dev/null"
+
+volumes:
+  ollama_models: {}
+
