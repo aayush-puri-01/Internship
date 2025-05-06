@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from routes import rag_routes
 from routes import recipe_routes
 
+
 app = FastAPI(
     title="Multimodal Assistant",
     description="Includes a RAG Pipeline and Recipe Generator powered by LLMs",
@@ -21,6 +22,4 @@ app.include_router(rag_routes.router,
 app.include_router(recipe_routes.router,
                    prefix="/recipe",
                    tags=["Recipe Generator"])
-
-
 

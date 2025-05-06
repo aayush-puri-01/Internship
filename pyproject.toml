@@ -7,6 +7,7 @@ requires-python = ">=3.10"
 dependencies = [
     "chromadb>=0.6.3",
     "fastapi>=0.115.12",
+    "gradio>=5.27.1",
     "langchain>=0.3.24",
     "langchain-chroma>=0.2.3",
     "langchain-community>=0.3.22",
@@ -15,6 +16,7 @@ dependencies = [
     "ollama>=0.4.8",
     "pydantic>=2.11.3",
     "pypdf>=5.4.0",
+    "redis>=6.0.0",
     "uvicorn>=0.34.1",
 ]
 
