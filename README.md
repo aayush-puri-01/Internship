@@ -93,6 +93,27 @@ This project implements a simple Retrieval-Augmented Generation (RAG) pipeline e
 - The prompt is passed to an Ollama LLM (e.g., `deepseek-r1:1.5b`).
 - The LLM generates a final response based on the prompt.
 
+## Redis Caching in the RAG Pipeline
+
+The RAG pipeline integrates a Redis-based caching mechanism to optimize performance and reduce unnecessary recomputation when handling repeated queries. Queries are matched only if they are exactly similar. Semantic query matching and Cache Retrieval Generation (CRG) is yet to be implemented.
+
+### What is Cached?
+
+Each query's final generated response is cached in Redis along with metadata, specifically:
+
+- `response`: the generated answer to the query
+- `timestamp`: the time at which the response was cached
+- `reranked`: a boolean string (`"True"` or `"False"`) indicating whether a reranker was used during the generation of this response
+
+Each query is treated as a field which in turn belongs to a higher key either **llm:single_line_responses** or **llm:paragraph_responses**
+
+### Handling `reranked` Queries Intelligently
+
+The pipeline distinguishes between reranked and non-reranked queries to ensure the quality of responses:
+
+- If a query is made with `use_reranker=True`, but the cached response was generated without reranking (`reranked=False`), **the cached response is ignored**, and a fresh response is generated using the reranker.
+- This ensures semantic consistency — reranked and non-reranked results are treated as distinct.
+
 ---
 
 # Cooking Assistant
@@ -130,6 +151,32 @@ A simple Python application that interacts with the Ollama API to generate recip
 - Ensure the Ollama server is running with the correct model.
 - Streaming mode displays recipe JSON chunks as they arrive.
 - Invalid inputs or API errors are handled with clear error messages.
+
+## Docker Setup
+
+This project uses Docker Compose to containerize and orchestrate a multi-component AI application consisting of:
+
+- **FastAPI** backend (`fastapi_service`) for handling recipe generation requests.
+- **Gradio** frontend (`gradio_service`) providing a chatbot interface for user interaction.
+- **Ollama** LLM runtime (`ollama`) used to serve and run the `deepseek-r1:1.5b` model.
+
+### Services Overview
+
+- **FastAPI Service**  
+  Exposes an API at `localhost:8000`. It uses environment variables to communicate with the Ollama model.
+
+- **Gradio Service**  
+  Exposes a web interface at `localhost:7860`, where users can input ingredients and prompts to interact with the recipe assistant.
+
+- **Ollama Model Server**  
+  Automatically pulls the `deepseek-r1:1.5b` model and keeps the service running in the background.
+
+### Running the App
+
+1. Build and start all services:
+   ```bash
+   docker-compose up --build
+   ```
 
 ```
 
