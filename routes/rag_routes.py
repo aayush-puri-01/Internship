@@ -31,8 +31,8 @@ async def stream_response(generator):
 
 pipeline = RAGPipeline(
     llm_model="deepseek-r1:1.5b",
-    use_reranker=False,
-    one_liner=False
+    use_reranker=True,
+    one_liner=True
 )
 
 reranker = QueryBasedReranker(
@@ -55,14 +55,14 @@ print(f"\nInitially Cache Status: \n")
 print(cache.redis.keys())
 
 def check_and_get_cache(question:str, format:str):
-    cached_response = cache.get_cached_response(question, response_format=format)
+    return_tuple = cache.get_cached_response(question, response_format=format)
 
-    if cached_response:
+    if return_tuple is not None:
         logger.info("\nCache Hit! Using cached response!\n")
-        return cached_response
+        return return_tuple[0], return_tuple[1]
     else:
         logger.info("\nCache Miss, running the RAG with LLM\n")
-        return None
+        return None, None
     
 
 
@@ -92,14 +92,18 @@ async def query_rag(request: QueryRequest, stream:bool = Query(False)):
             elif pipeline.one_liner == True and stream == False:
                 response_format = "single_line"
 
-                ans = check_and_get_cache(request.user_query, response_format)
+                ans, _ = check_and_get_cache(request.user_query, response_format)
 
                 if ans is not None:
                     answer = ans
                 else:
                     logger.info("Launching Non-Stream Responder for one liner response\n")
                     answer = await pipeline.respond_one_liner("rag_pipeline/prompt_templates_oneline.txt", request.user_query)
-                    cache.cache_response(request.user_query, answer, response_format=response_format)
+                    cache.cache_response(
+                        request.user_query,
+                        answer, 
+                        response_format=response_format, reranked=bool(pipeline.use_reranker)
+                    )
                     logger.info("\nNew Query/Response successfully cached!\n")
                     print(f"Updated Cache Status:\n")
                     print(cache.redis.keys()) 
@@ -119,14 +123,19 @@ async def query_rag(request: QueryRequest, stream:bool = Query(False)):
             else:
                 response_format = "paragraph"
 
-                ans = check_and_get_cache(request.user_query, response_format)
+                ans, _ = check_and_get_cache(request.user_query, response_format)
 
                 if ans is not None:
                     answer = ans
                 else:
                     logger.info("Launching Non-Stream Responder for Paragraph response\n")
                     answer = await pipeline.respond_paragraph("rag_pipeline/prompt_templates.txt", request.user_query)
-                    cache.cache_response(request.user_query, answer, response_format=response_format)
+                    print(type(pipeline.use_reranker))
+                    cache.cache_response(
+                        request.user_query, 
+                        answer, 
+                        response_format=response_format, reranked=bool(pipeline.use_reranker)
+                    )
                     logger.info("\nNew Query/Response successfully cached!\n")
                     print(f"Updated Cache Status: \n")
                     print(cache.redis.keys()) 
@@ -135,47 +144,57 @@ async def query_rag(request: QueryRequest, stream:bool = Query(False)):
             logger.info("Starting LLM based Reranker\n")
             retriever = pipeline.initialize_retriever(k=5)
 
-            chunks = retriever.invoke(request.user_query)
+            ans_format = "single_line" if pipeline.one_liner else "paragraph"
 
-            queries_for_chunks, chunks = reranker.generate_chunk_based_queries(chunks)
+            ans, check_if_reranked = check_and_get_cache(request.user_query, ans_format)
 
-            question_embedding, chunk_queries_embeddings = reranker.generate_embeddings(request.user_query, queries_for_chunks)
-
-            scores = reranker.calculate_similarity_scores(question_embedding, chunk_queries_embeddings)
-
-            reranked_chunks = reranker.rerank_chunks(scores, chunks, top_k = 3)
-            logger.info("Retrieved Chunks Successfully reranked")
-
-            if pipeline.one_liner == True:
-                ans_format = "single_line"
-                prompt_template = pipeline.load_prompt_template(
-                    "rag_pipeline/prompt_templates_oneline.txt",
-                )
+            if ans is not None and check_if_reranked == "True":
+                answer = ans
             else:
-                ans_format = "paragraph"
-                prompt_template = pipeline.load_prompt_template(
-                    "rag_pipeline/prompt_templates.txt",
-                )           
+                logger.info("Since reranked response has not been cached, reranking mechanism initiated\n")
 
-            if stream:
-                generator = pipeline.reranker_build_and_respond_stream(reranked_chunks, prompt_template, user_question=request.user_query)
-                logger.info(f"Launching Reranker enhanced Stream Responder for {ans_format} response")
-                return StreamingResponse(
-                    stream_response(generator),
-                    media_type="text/event-stream",
-                    headers = {
-                        "Cache-Control" : "no-cache",
-                        "Connection" : "keep-alive"
-                    }
-                )
-            else:
-                ans = check_and_get_cache(request.user_query, ans_format)
-                if ans is not None:
-                    answer = ans
+                chunks = retriever.invoke(request.user_query)
+
+                queries_for_chunks, chunks = reranker.generate_chunk_based_queries(chunks)
+
+                question_embedding, chunk_queries_embeddings = reranker.generate_embeddings(request.user_query, queries_for_chunks)
+
+                scores = reranker.calculate_similarity_scores(question_embedding, chunk_queries_embeddings)
+
+                reranked_chunks = reranker.rerank_chunks(scores, chunks, top_k = 3)
+                logger.info("Retrieved Chunks Successfully reranked")
+
+                if pipeline.one_liner == True:
+                    ans_format = "single_line"
+                    prompt_template = pipeline.load_prompt_template(
+                        "rag_pipeline/prompt_templates_oneline.txt",
+                    )
+                else:
+                    ans_format = "paragraph"
+                    prompt_template = pipeline.load_prompt_template(
+                        "rag_pipeline/prompt_templates.txt",
+                    )           
+
+                if stream:
+                    generator = pipeline.reranker_build_and_respond_stream(reranked_chunks, prompt_template, user_question=request.user_query)
+                    logger.info(f"Launching Reranker enhanced Stream Responder for {ans_format} response")
+                    return StreamingResponse(
+                        stream_response(generator),
+                        media_type="text/event-stream",
+                        headers = {
+                            "Cache-Control" : "no-cache",
+                            "Connection" : "keep-alive"
+                        }
+                    )
                 else:
                     logger.info(f"Launching Non-Stream Responder for {ans_format} response")
                     answer = await pipeline.reranker_build_and_respond(reranked_chunks, prompt_template, user_question=request.user_query)
-                    cache.cache_response(request.user_query, answer, response_format=ans_format)
+                    cache.cache_response(
+                        request.user_query, 
+                        answer, 
+                        response_format=ans_format, 
+                        reranked=bool(pipeline.use_reranker)
+                    )
                     logger.info("\nNew Query/Response successfully cached!\n")
                     print(f"Updated Cache Status: \n")
                     print(cache.redis.keys()) 
