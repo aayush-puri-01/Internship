@@ -3,11 +3,17 @@ from langchain_ollama import OllamaEmbeddings
 from langchain_ollama.llms import OllamaLLM
 from langchain.schema.document import Document
 from typing import List
-
+from langchain_openai import ChatOpenAI
+import os
 
 class QueryBasedReranker:
     def __init__(self, llm_model: str = "deepseek-r1:1.5b", embedding_model:str = "nomic-embed-text"):
-        self.llm = OllamaLLM(model=llm_model)
+        use_openai = bool(os.getenv("OPENAI_API_KEY"))
+        if use_openai:
+            self.llm = ChatOpenAI(model="gpt-4o-mini",
+                                  api_key = os.getenv("OPENAI_API_KEY"))
+        else:
+            self.llm = OllamaLLM(model=llm_model)
         self.embedder = OllamaEmbeddings(model=embedding_model)
 
     def generate_chunk_based_queries(self, chunks):
@@ -28,7 +34,7 @@ class QueryBasedReranker:
 
             response = self.llm.invoke(prompt)
 
-            chunk_queries.append(response.strip())
+            chunk_queries.append(str(response).strip())
 
         return chunk_queries, chunk_list
     
