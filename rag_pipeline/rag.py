@@ -7,12 +7,12 @@ from langchain.chains import create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
-from langchain.callbacks.base import BaseCallbackHandler
 from langchain.callbacks.manager import CallbackManager
 import os
 from rag_pipeline.reranker import QueryBasedReranker
-
-
+from langchain_openai import ChatOpenAI
+from dotenv import load_dotenv
+load_dotenv()
 
 class RAGPipeline():
     def __init__(self, llm_model:str = "deepseek-r1:1.5b", persist_dir = "rag_pipeline/rag_chroma_db", use_reranker: bool = True, one_liner: bool = True):
@@ -20,7 +20,18 @@ class RAGPipeline():
 
         callback_manager = CallbackManager([StreamingStdOutCallbackHandler()])
 
-        self.llm = OllamaLLM(model=self.llm_model, callbacks=callback_manager)
+        self.use_openai = bool(os.getenv("OPENAI_API_KEY"))
+
+        if self.use_openai:
+            self.llm = ChatOpenAI(
+                model = "gpt-4o-mini",
+                api_key = os.getenv("OPENAI_API_KEY"),
+                streaming = False
+            )
+            print(f"\n[INFO]: Using OpenAI model : GPT-4o-mini\n")
+        else:
+            self.llm = OllamaLLM(model=self.llm_model,  callbacks=callback_manager)
+            print(f"\n[INFO]: Using Ollama model (deepseek-r1:1.5b)\n")
 
         self.vectorstore = None
         self.persist_directory = persist_dir
