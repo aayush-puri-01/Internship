@@ -20,7 +20,8 @@ class RAGPipeline():
 
         callback_manager = CallbackManager([StreamingStdOutCallbackHandler()])
 
-        self.use_openai = bool(os.getenv("OPENAI_API_KEY"))
+        # self.use_openai = bool(os.getenv("OPENAI_API_KEY"))
+        self.use_openai = True
 
         if self.use_openai:
             self.llm = ChatOpenAI(
