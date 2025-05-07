@@ -11,5 +11,7 @@ rag_pipeline/rag_chroma_db
 # Virtual environments
 .venv
 
+#environment variable files
 .env
+
 
