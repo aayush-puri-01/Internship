@@ -6,6 +6,10 @@ dist/
 wheels/
 *.egg-info
 rag_chroma_db/
+rag_pipeline/rag_chroma_db
 
 # Virtual environments
 .venv
+
+.env
+
